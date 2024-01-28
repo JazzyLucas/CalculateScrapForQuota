@@ -63,29 +63,28 @@ namespace CalculateScrapForQuota.Patches
 
             if (optimalGrabbables.totalValue >= unmetQuota)
             {
-                AddGrabbablesToHighlighter(optimalGrabbables.combination);
                 SetupText(optimalGrabbables.totalValue);
-                Display();
+                Display(optimalGrabbables.combination.Select(g => g.gameObject).ToList());
             }
         }
         
         private static Coroutine displayCoroutine = null;
-        private static void Display(float duration = 5f)
+        private static void Display(List<GameObject> gameObjectsToHighlight, float duration = 5f)
         {
             if (displayCoroutine != null)
                 GameNetworkManager.Instance.StopCoroutine(displayCoroutine);
+            MaterialSwapper.SwapOn(gameObjectsToHighlight);
             displayCoroutine = GameNetworkManager.Instance.StartCoroutine(DisplayRoutine(duration));
         }
         private static IEnumerator DisplayRoutine(float duration)
         {
-            Highlighter.Show();
             _textGO.SetActive(true);
 
             yield return new WaitForSeconds(duration);
 
             _textGO.SetActive(false);
-            Highlighter.Clear();
-            Highlighter.Hide();
+            MaterialSwapper.Clear();
+            MaterialSwapper.SwapOff();
         }
 
         private static List<GrabbableObject> GetAllSellableObjects()
@@ -113,15 +112,6 @@ namespace CalculateScrapForQuota.Patches
                    && grabbable.name != "Gift"
                    && grabbable.name != "Shotgun"
                    && grabbable.name != "Ammo";
-        }
-
-        private static void AddGrabbablesToHighlighter(List<GrabbableObject> grabbables)
-        {
-            foreach (var go in grabbables.Select(g => g.gameObject))
-            {
-                P.Log($"Adding {go.name} to Outliner");
-                Highlighter.Add(go);
-            }
         }
         
         private static GameObject _textGO;
