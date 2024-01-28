@@ -27,32 +27,34 @@ namespace CalculateScrapForQuota.Patches
         private static GameObject shipGO => GameObject.Find("/Environment/HangarShip");
         private static GameObject valueCounterGO => GameObject.Find("/Systems/UI/Canvas/IngamePlayerHUD/BottomMiddle/ValueCounter");
         private static int unmetQuota => TimeOfDay.Instance.profitQuota - TimeOfDay.Instance.quotaFulfilled;
-        private static bool isAtTheCompany => StartOfRound.Instance.currentLevel.levelID == 3;
+        private static bool isAtCompany => StartOfRound.Instance.currentLevel.levelID == 3;
         private static bool isInShip => GameNetworkManager.Instance.localPlayerController.isInHangarShipRoom;
+        private static bool isScanning(HUDManager instance) => (float)typeof(HUDManager)
+            .GetField("playerPingingScan", BindingFlags.NonPublic | BindingFlags.Instance)
+            .GetValue(instance) > -1.0;
+        private static bool canPlayerScan(HUDManager instance) => (bool)typeof(HUDManager)
+            .GetMethod("CanPlayerScan", BindingFlags.NonPublic | BindingFlags.Instance)
+            .Invoke(instance, null);
         
         [HarmonyPrefix]
         [HarmonyPatch(typeof(HUDManager), "PingScan_performed")]
         private static void OnScan(HUDManager __instance, InputAction.CallbackContext context)
         {
             P.Log("OnScan() called.");
-            var fieldInfo = typeof(HUDManager).GetField("playerPingingScan", BindingFlags.NonPublic | BindingFlags.Instance);
-            var playerPingingScan = (float)fieldInfo.GetValue(__instance);
-            var methodInfo = typeof(HUDManager).GetMethod("CanPlayerScan", BindingFlags.NonPublic | BindingFlags.Instance);
-            var canPlayerScan = (bool)methodInfo.Invoke(__instance, null);
             
             // Guard Clause
-            if (!context.performed 
-                || !canPlayerScan 
-                || playerPingingScan > -1.0
+            if (!context.performed
+                || isScanning(__instance)
+                || !canPlayerScan(__instance)
                 || GameNetworkManager.Instance.localPlayerController == null
                 ) return;
             
             P.Log("OnScan() is valid.");
 
             List<GrabbableObject> sellableGrabbables;
-            if (isInShip && !isAtTheCompany)
+            if (isInShip && !isAtCompany)
                 sellableGrabbables = GetSellableGrabbablesInChildren(shipGO);
-            else if (isAtTheCompany)
+            else if (isAtCompany)
                 sellableGrabbables = GetAllSellableObjects();
             else
                 return;
@@ -61,27 +63,28 @@ namespace CalculateScrapForQuota.Patches
 
             if (optimalGrabbables.totalValue >= unmetQuota)
             {
-                HighlightGrabbables(optimalGrabbables.combination);
+                AddGrabbablesToHighlighter(optimalGrabbables.combination);
                 SetupText(optimalGrabbables.totalValue);
+                Display();
             }
-            
-            GameNetworkManager.Instance.StartCoroutine(Display());
         }
         
-        private static bool isDisplaying = false;
-        private static IEnumerator Display(float duration = 5f)
+        private static Coroutine displayCoroutine = null;
+        private static void Display(float duration = 5f)
         {
-            if (isDisplaying)
-                yield break;
-            
-            isDisplaying = true;
-            _textGO.SetActive(true);
+            if (displayCoroutine != null)
+                GameNetworkManager.Instance.StopCoroutine(displayCoroutine);
+            displayCoroutine = GameNetworkManager.Instance.StartCoroutine(DisplayRoutine(duration));
+        }
+        private static IEnumerator DisplayRoutine(float duration)
+        {
             Highlighter.Show();
-            
+            _textGO.SetActive(true);
+
             yield return new WaitForSeconds(duration);
-            
-            isDisplaying = false;
+
             _textGO.SetActive(false);
+            Highlighter.Clear();
             Highlighter.Hide();
         }
 
@@ -112,7 +115,7 @@ namespace CalculateScrapForQuota.Patches
                    && grabbable.name != "Ammo";
         }
 
-        private static void HighlightGrabbables(List<GrabbableObject> grabbables)
+        private static void AddGrabbablesToHighlighter(List<GrabbableObject> grabbables)
         {
             foreach (var go in grabbables.Select(g => g.gameObject))
             {

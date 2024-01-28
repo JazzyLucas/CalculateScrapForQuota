@@ -4,6 +4,6 @@ namespace CalculateScrapForQuota
     {
         public const string PLUGIN_GUID = "CalculateScrapForQuota";
         public const string PLUGIN_NAME = "CalculateScrapForQuota";
-        public const string PLUGIN_VERSION = "1.0.3";
+        public const string PLUGIN_VERSION = "1.1.0";
     }
 }
