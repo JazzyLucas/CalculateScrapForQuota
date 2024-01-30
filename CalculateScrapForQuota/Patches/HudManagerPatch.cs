@@ -27,69 +27,73 @@ namespace CalculateScrapForQuota.Patches
         private static GameObject shipGO => GameObject.Find("/Environment/HangarShip");
         private static GameObject valueCounterGO => GameObject.Find("/Systems/UI/Canvas/IngamePlayerHUD/BottomMiddle/ValueCounter");
         private static int unmetQuota => Math.Max(0, TimeOfDay.Instance.profitQuota - TimeOfDay.Instance.quotaFulfilled);
-        private static bool isAtTheCompany => StartOfRound.Instance.currentLevel.levelID == 3;
+        private static double buyingRate => isAtCompany ? StartOfRound.Instance.companyBuyingRate : 1d;
+        private static bool isAtCompany => StartOfRound.Instance.currentLevel.levelID == 3;
         private static bool isInShip => GameNetworkManager.Instance.localPlayerController.isInHangarShipRoom;
+        private static bool isScanning(HUDManager instance) => (float)typeof(HUDManager)
+            .GetField("playerPingingScan", BindingFlags.NonPublic | BindingFlags.Instance)
+            .GetValue(instance) > -1.0;
+        private static bool canPlayerScan(HUDManager instance) => (bool)typeof(HUDManager)
+            .GetMethod("CanPlayerScan", BindingFlags.NonPublic | BindingFlags.Instance)
+            .Invoke(instance, null);
+
+        public static List<GameObject> CurrentHighlight = new();
+        public static bool toggled = false;
+        
+        private static GameObject _textGO;
+        private static TextMeshProUGUI _textMesh;
         
         [HarmonyPrefix]
         [HarmonyPatch(typeof(HUDManager), "PingScan_performed")]
         private static void OnScan(HUDManager __instance, InputAction.CallbackContext context)
         {
             P.Log("OnScan() called.");
-            var fieldInfo = typeof(HUDManager).GetField("playerPingingScan", BindingFlags.NonPublic | BindingFlags.Instance);
-            var playerPingingScan = (float)fieldInfo.GetValue(__instance);
-            var methodInfo = typeof(HUDManager).GetMethod("CanPlayerScan", BindingFlags.NonPublic | BindingFlags.Instance);
-            var canPlayerScan = (bool)methodInfo.Invoke(__instance, null);
             
             // Guard Clause
-            if (!context.performed 
-                || !canPlayerScan 
-                || playerPingingScan > -1.0
+            if (!context.performed
+                || isScanning(__instance)
+                || !canPlayerScan(__instance)
                 || GameNetworkManager.Instance.localPlayerController == null
                 ) return;
             
             P.Log("OnScan() is valid.");
 
-            if (unmetQuota <= 0)
-                return;
-
-            List<GrabbableObject> sellableGrabbables;
-            if (isInShip && !isAtTheCompany)
-                sellableGrabbables = GetSellableGrabbablesInChildren(shipGO);
-            else if (isAtTheCompany)
-                sellableGrabbables = GetAllSellableObjects();
-            else
-                return;
+            CurrentHighlight.Clear();
             
-            var optimalGrabbables = MathUtil.FindBestCombination(sellableGrabbables, unmetQuota, grabbable => grabbable.scrapValue);
-
-            if (optimalGrabbables.totalValue >= unmetQuota)
+            toggled = !toggled;
+            
+            if (toggled)
             {
-                HighlightGrabbables(optimalGrabbables.combination);
-                SetupText(optimalGrabbables.totalValue);
+                List<GrabbableObject> sellableGrabbables;
+                if (isInShip && !isAtCompany)
+                    sellableGrabbables = GetSellableGrabbablesInChildren(shipGO);
+                else if (isAtCompany)
+                    sellableGrabbables = GetAllSellableObjects();
+                else
+                    return;
+
+                int ValueCalculation(GrabbableObject grabbable) => isAtCompany ? (int)(grabbable.scrapValue * buyingRate) : grabbable.scrapValue;
+                var optimalGrabbables = MathUtil.FindBestCombination(sellableGrabbables, unmetQuota, ValueCalculation);
+
+                if (optimalGrabbables.totalValue >= unmetQuota)
+                {
+                    CurrentHighlight = optimalGrabbables.combination.Select(g => g.gameObject).ToList();
+                    SetupText(optimalGrabbables.totalValue);
+                    MaterialSwapper.SwapOn(CurrentHighlight);
+                }
             }
-            
-            GameNetworkManager.Instance.StartCoroutine(Display());
+            else
+            {
+                SetupText();
+                MaterialSwapper.SwapOff();
+                MaterialSwapper.Clear();
+            }
         }
         
-        private static bool isDisplaying = false;
-        private static IEnumerator Display(float duration = 5f)
-        {
-            if (isDisplaying)
-                yield break;
-            
-            isDisplaying = true;
-            _textGO.SetActive(true);
-            Highlighter.Show();
-            
-            yield return new WaitForSeconds(duration);
-            
-            isDisplaying = false;
-            _textGO.SetActive(false);
-            Highlighter.Hide();
-        }
 
         private static List<GrabbableObject> GetAllSellableObjects()
         {
+            // ReSharper disable once AccessToStaticMemberViaDerivedType
             var grabbables = GameObject.FindObjectsOfType<GrabbableObject>();
             var sellableGrabbables = grabbables.Where(IsGrabbableSellable).ToList();
             return sellableGrabbables;
@@ -114,33 +118,28 @@ namespace CalculateScrapForQuota.Patches
                    && grabbable.name != "Shotgun"
                    && grabbable.name != "Ammo";
         }
-
-        private static void HighlightGrabbables(List<GrabbableObject> grabbables)
-        {
-            Highlighter.Clear();
-            foreach (var go in grabbables.Select(g => g.gameObject))
-            {
-                P.Log($"Adding {go.name} to Outliner");
-                Highlighter.Add(go);
-            }
-        }
         
-        private static GameObject _textGO;
-        private static TextMeshProUGUI _textMesh => _textGO.GetComponentInChildren<TextMeshProUGUI>();
-        
-        private static void SetupText(int totalValue)
+        private static void SetupText(int totalValue = -1)
         {
-            // Text GameObject instantiation and caching
             if (!_textGO)
             {
                 _textGO = Object.Instantiate(valueCounterGO.gameObject, valueCounterGO.transform.parent, false);
                 _textGO.transform.Translate(0f, 1f, 0f);
                 var pos = _textGO.transform.localPosition;
                 _textGO.transform.localPosition = new(pos.x + 50f, -100f, pos.z);
+                _textMesh = _textGO.GetComponentInChildren<TextMeshProUGUI>();
                 _textMesh.fontSize = 12;
             }
-            
-            _textMesh.text = $"Optimal: {totalValue}";
+
+            if (totalValue > 0)
+            {
+                _textGO.SetActive(true);
+                _textMesh.text = $"Optimal: {totalValue}";
+            }
+            else
+            {
+                _textGO.SetActive(false);
+            }
         }
     }
 }

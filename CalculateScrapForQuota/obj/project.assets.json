@@ -2743,7 +2743,7 @@
     "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages": {}
   },
   "project": {
-    "version": "1.0.3",
+    "version": "1.1.0",
     "restore": {
       "projectUniqueName": "D:\\Miscellaneous Repos\\CalculateScrapForQuota\\CalculateScrapForQuota\\CalculateScrapForQuota.csproj",
       "projectName": "CalculateScrapForQuota",

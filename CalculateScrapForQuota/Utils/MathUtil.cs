@@ -14,7 +14,7 @@ public class MathUtil
         if (items == null) throw new ArgumentNullException(nameof(items));
         if (valueSelector == null) throw new ArgumentNullException(nameof(valueSelector));
         if (quota < 0) throw new ArgumentException("Quota cannot be negative.", nameof(quota));
-
+        
         int n = items.Count;
         int maxValue = items.Sum(item => valueSelector(item));
         int[,] dp = new int[n + 1, maxValue + 1];
