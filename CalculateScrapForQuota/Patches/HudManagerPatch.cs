@@ -37,6 +37,7 @@ namespace CalculateScrapForQuota.Patches
             .Invoke(instance, null);
 
         public static List<GameObject> CurrentHighlight = new();
+        public static bool toggled = false;
         
         [HarmonyPrefix]
         [HarmonyPatch(typeof(HUDManager), "PingScan_performed")]
@@ -53,42 +54,37 @@ namespace CalculateScrapForQuota.Patches
             
             P.Log("OnScan() is valid.");
 
-            List<GrabbableObject> sellableGrabbables;
-            if (isInShip && !isAtCompany)
-                sellableGrabbables = GetSellableGrabbablesInChildren(shipGO);
-            else if (isAtCompany)
-                sellableGrabbables = GetAllSellableObjects();
-            else
-                return;
+            CurrentHighlight.Clear();
             
-            var optimalGrabbables = MathUtil.FindBestCombination(sellableGrabbables, unmetQuota, grabbable => grabbable.scrapValue);
-
-            if (optimalGrabbables.totalValue >= unmetQuota)
+            toggled = !toggled;
+            
+            if (toggled)
             {
-                SetupText(optimalGrabbables.totalValue);
-                CurrentHighlight = optimalGrabbables.combination.Select(g => g.gameObject).ToList();
-                Display();
+                List<GrabbableObject> sellableGrabbables;
+                if (isInShip && !isAtCompany)
+                    sellableGrabbables = GetSellableGrabbablesInChildren(shipGO);
+                else if (isAtCompany)
+                    sellableGrabbables = GetAllSellableObjects();
+                else
+                    return;
+            
+                var optimalGrabbables = MathUtil.FindBestCombination(sellableGrabbables, unmetQuota, grabbable => grabbable.scrapValue);
+
+                if (optimalGrabbables.totalValue >= unmetQuota)
+                {
+                    CurrentHighlight = optimalGrabbables.combination.Select(g => g.gameObject).ToList();
+                    SetupText(optimalGrabbables.totalValue);
+                    MaterialSwapper.SwapOn(CurrentHighlight);
+                }
+            }
+            else
+            {
+                SetupText();
+                MaterialSwapper.SwapOff();
+                MaterialSwapper.Clear();
             }
         }
         
-        private static Coroutine displayCoroutine = null;
-        private static void Display(float duration = 5f)
-        {
-            if (displayCoroutine != null)
-                GameNetworkManager.Instance.StopCoroutine(displayCoroutine);
-            MaterialSwapper.SwapOn(CurrentHighlight);
-            displayCoroutine = GameNetworkManager.Instance.StartCoroutine(DisplayRoutine(duration));
-        }
-        private static IEnumerator DisplayRoutine(float duration)
-        {
-            _textGO.SetActive(true);
-
-            yield return new WaitForSeconds(duration);
-
-            _textGO.SetActive(false);
-            MaterialSwapper.SwapOff();
-            //MaterialSwapper.Clear();
-        }
 
         private static List<GrabbableObject> GetAllSellableObjects()
         {
@@ -118,9 +114,9 @@ namespace CalculateScrapForQuota.Patches
         }
         
         private static GameObject _textGO;
-        private static TextMeshProUGUI _textMesh => _textGO.GetComponentInChildren<TextMeshProUGUI>();
+        private static TextMeshProUGUI _textMesh;
         
-        private static void SetupText(int totalValue)
+        private static void SetupText(int totalValue = -1)
         {
             // Text GameObject instantiation and caching
             if (!_textGO)
@@ -129,10 +125,19 @@ namespace CalculateScrapForQuota.Patches
                 _textGO.transform.Translate(0f, 1f, 0f);
                 var pos = _textGO.transform.localPosition;
                 _textGO.transform.localPosition = new(pos.x + 50f, -100f, pos.z);
+                _textMesh = _textGO.GetComponentInChildren<TextMeshProUGUI>();
                 _textMesh.fontSize = 12;
             }
-            
-            _textMesh.text = $"Optimal: {totalValue}";
+
+            if (totalValue > 0)
+            {
+                _textGO.SetActive(true);
+                _textMesh.text = $"Optimal: {totalValue}";
+            }
+            else
+            {
+                _textGO.SetActive(false);
+            }
         }
     }
 }

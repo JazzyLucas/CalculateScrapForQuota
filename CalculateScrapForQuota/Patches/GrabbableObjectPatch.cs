@@ -37,7 +37,6 @@ namespace CalculateScrapForQuota.Patches
             {
                 List<GameObject> gos = new();
                 gos.Add(grabbableGO);
-                P.Log("Enable?");
                 MaterialSwapper.SwapOn(gos);
             }
         }
