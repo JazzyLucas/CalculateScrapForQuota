@@ -7,6 +7,7 @@ using System.Reflection;
 using System.Threading.Tasks;
 using BepInEx;
 using BepInEx.Logging;
+using CalculateScrapForQuota.Scripts;
 using CalculateScrapForQuota.Utils;
 using Dissonance;
 using HarmonyLib;
@@ -28,6 +29,7 @@ namespace CalculateScrapForQuota
             _logger = Logger;
             
             MyConfig = new(Config);
+            MaterialSwapper.swapColor = MyConfig.highlightColor;
             
             Harmony harmony = new(PluginInfo.PLUGIN_GUID);
             harmony.PatchAll(Assembly.GetExecutingAssembly());
@@ -35,7 +37,7 @@ namespace CalculateScrapForQuota
 
         internal static void Log(string m)
         {
-            if (MyConfig.isVerbose.Value)
+            if (MyConfig.isVerbose)
                 _logger.LogMessage(m);
         }
     }
