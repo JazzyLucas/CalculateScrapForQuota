@@ -26,7 +26,8 @@ namespace CalculateScrapForQuota.Patches
     {
         private static GameObject shipGO => GameObject.Find("/Environment/HangarShip");
         private static GameObject valueCounterGO => GameObject.Find("/Systems/UI/Canvas/IngamePlayerHUD/BottomMiddle/ValueCounter");
-        private static int unmetQuota => TimeOfDay.Instance.profitQuota - TimeOfDay.Instance.quotaFulfilled;
+        private static int unmetQuota => Math.Max(0, TimeOfDay.Instance.profitQuota - TimeOfDay.Instance.quotaFulfilled);
+        private static double buyingRate => isAtCompany ? StartOfRound.Instance.companyBuyingRate : 1d;
         private static bool isAtCompany => StartOfRound.Instance.currentLevel.levelID == 3;
         private static bool isInShip => GameNetworkManager.Instance.localPlayerController.isInHangarShipRoom;
         private static bool isScanning(HUDManager instance) => (float)typeof(HUDManager)
@@ -38,6 +39,9 @@ namespace CalculateScrapForQuota.Patches
 
         public static List<GameObject> CurrentHighlight = new();
         public static bool toggled = false;
+        
+        private static GameObject _textGO;
+        private static TextMeshProUGUI _textMesh;
         
         [HarmonyPrefix]
         [HarmonyPatch(typeof(HUDManager), "PingScan_performed")]
@@ -67,8 +71,9 @@ namespace CalculateScrapForQuota.Patches
                     sellableGrabbables = GetAllSellableObjects();
                 else
                     return;
-            
-                var optimalGrabbables = MathUtil.FindBestCombination(sellableGrabbables, unmetQuota, grabbable => grabbable.scrapValue);
+
+                int ValueCalculation(GrabbableObject grabbable) => isAtCompany ? (int)(grabbable.scrapValue * buyingRate) : grabbable.scrapValue;
+                var optimalGrabbables = MathUtil.FindBestCombination(sellableGrabbables, unmetQuota, ValueCalculation);
 
                 if (optimalGrabbables.totalValue >= unmetQuota)
                 {
@@ -88,6 +93,7 @@ namespace CalculateScrapForQuota.Patches
 
         private static List<GrabbableObject> GetAllSellableObjects()
         {
+            // ReSharper disable once AccessToStaticMemberViaDerivedType
             var grabbables = GameObject.FindObjectsOfType<GrabbableObject>();
             var sellableGrabbables = grabbables.Where(IsGrabbableSellable).ToList();
             return sellableGrabbables;
@@ -113,12 +119,8 @@ namespace CalculateScrapForQuota.Patches
                    && grabbable.name != "Ammo";
         }
         
-        private static GameObject _textGO;
-        private static TextMeshProUGUI _textMesh;
-        
         private static void SetupText(int totalValue = -1)
         {
-            // Text GameObject instantiation and caching
             if (!_textGO)
             {
                 _textGO = Object.Instantiate(valueCounterGO.gameObject, valueCounterGO.transform.parent, false);
