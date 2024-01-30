@@ -112,7 +112,7 @@ public static class MaterialSwapper
         {
             get
             {
-                List<Renderer> result = new(MeshRenderers.ToList());
+                List<Renderer> result = new(MeshRenderers);
                 result.AddRange(SkinnedMeshRenderers);
                 return result;
             }
@@ -148,18 +148,21 @@ public static class MaterialSwapper
                 {
                     renderer.materials[i] = swapMaterial;
                     renderer.materials[i].color = new(swapColor.r, swapColor.g, swapColor.b);
-                    renderer.enabled = true;
                 }
             }
         }
         
         public void Swap(bool on)
         {
-            foreach (var renderer in _rootVisuals.Renderers) 
+            foreach (var renderer in _rootVisuals.Renderers)
+            {
                 renderer.enabled = !on;
-            _cloneGO.SetActive(on);
-            foreach (var renderer in _cloneVisuals.Renderers) 
+            }
+            foreach (var renderer in _cloneVisuals.Renderers)
+            {
                 renderer.enabled = on;
+                renderer.rendererPriority = on ? 69420 : -69420;
+            }
         }
         public void Dispose()
         {

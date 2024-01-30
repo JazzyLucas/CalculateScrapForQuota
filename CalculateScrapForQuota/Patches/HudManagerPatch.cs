@@ -35,6 +35,8 @@ namespace CalculateScrapForQuota.Patches
         private static bool canPlayerScan(HUDManager instance) => (bool)typeof(HUDManager)
             .GetMethod("CanPlayerScan", BindingFlags.NonPublic | BindingFlags.Instance)
             .Invoke(instance, null);
+
+        public static List<GameObject> CurrentHighlight = new();
         
         [HarmonyPrefix]
         [HarmonyPatch(typeof(HUDManager), "PingScan_performed")]
@@ -64,16 +66,17 @@ namespace CalculateScrapForQuota.Patches
             if (optimalGrabbables.totalValue >= unmetQuota)
             {
                 SetupText(optimalGrabbables.totalValue);
-                Display(optimalGrabbables.combination.Select(g => g.gameObject).ToList());
+                CurrentHighlight = optimalGrabbables.combination.Select(g => g.gameObject).ToList();
+                Display();
             }
         }
         
         private static Coroutine displayCoroutine = null;
-        private static void Display(List<GameObject> gameObjectsToHighlight, float duration = 5f)
+        private static void Display(float duration = 5f)
         {
             if (displayCoroutine != null)
                 GameNetworkManager.Instance.StopCoroutine(displayCoroutine);
-            MaterialSwapper.SwapOn(gameObjectsToHighlight);
+            MaterialSwapper.SwapOn(CurrentHighlight);
             displayCoroutine = GameNetworkManager.Instance.StartCoroutine(DisplayRoutine(duration));
         }
         private static IEnumerator DisplayRoutine(float duration)
@@ -83,8 +86,8 @@ namespace CalculateScrapForQuota.Patches
             yield return new WaitForSeconds(duration);
 
             _textGO.SetActive(false);
-            MaterialSwapper.Clear();
             MaterialSwapper.SwapOff();
+            //MaterialSwapper.Clear();
         }
 
         private static List<GrabbableObject> GetAllSellableObjects()
